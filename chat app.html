@@ -1,164 +1,170 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>WhatsApp-Style Chat</title>
-  <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; }
-    #container { max-width: 600px; margin: auto; padding: 20px; }
-    #login, #chatUI { display: none; }
-    #chat { background: #fff; border-radius: 10px; padding: 10px; height: 400px; overflow-y: scroll; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
-    .message { margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 80%; position: relative; }
-    .own { background: #dcf8c6; margin-left: auto; }
-    .other { background: #fff; border: 1px solid #ddd; }
-    .sender { font-weight: bold; font-size: 0.9em; margin-bottom: 5px; }
-    .timestamp { font-size: 0.8em; color: #888; margin-top: 5px; text-align: right; }
+    body { margin: 0; font-family: 'Segoe UI', sans-serif; background: #f4f4f4; }
+    .main-content { padding: 40px; max-width: 800px; margin: auto; }
+    .chat-trigger {
+      position: fixed; bottom: 20px; right: 20px;
+      background: #25d366; color: white; border: none;
+      border-radius: 50%; width: 60px; height: 60px;
+      font-size: 24px; cursor: pointer;
+    }
+    .chat-app {
+      position: fixed; bottom: 90px; right: 20px;
+      width: 350px; height: 500px; background: #ece5dd;
+      border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.3);
+      display: none; flex-direction: column; overflow: hidden;
+    }
+    .chat-header {
+      background: #075e54; color: white; padding: 10px;
+      font-weight: bold; display: flex; justify-content: space-between;
+    }
+    .chat-body {
+      flex-grow: 1; padding: 10px; overflow-y: auto; background: #fff;
+    }
+    .chat-footer {
+      padding: 10px; background: #f0f0f0; display: flex; gap: 5px;
+    }
+    .chat-footer input[type="text"] {
+      flex-grow: 1; padding: 8px; border-radius: 20px; border: 1px solid #ccc;
+    }
+    .chat-footer button {
+      background: #25d366; border: none; color: white;
+      padding: 8px 12px; border-radius: 50%; cursor: pointer;
+    }
+    .message {
+      max-width: 70%; margin-bottom: 10px; padding: 10px;
+      border-radius: 10px; position: relative;
+    }
+    .sent { background: #dcf8c6; margin-left: auto; }
+    .received { background: #fff; }
+    .timestamp { font-size: 0.8em; color: #888; text-align: right; margin-top: 5px; }
+    .status { font-size: 0.8em; color: #888; position: absolute; bottom: 5px; right: 10px; }
     img.chat-img { max-width: 100%; border-radius: 8px; margin-top: 5px; }
-    #controls { display: flex; gap: 5px; margin-top: 10px; }
-    input[type="text"], input[type="email"], input[type="password"] { width: 100%; padding: 8px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
-    button { padding: 8px 12px; border: none; background: #25d366; color: white; border-radius: 5px; cursor: pointer; }
-    button:hover { background: #128c7e; }
-    .delete-btn { position: absolute; top: 5px; right: 10px; background: transparent; border: none; color: red; cursor: pointer; }
   </style>
 </head>
 <body>
-<div id="container">
-  <h2>WhatsApp-Style Chat</h2>
 
-  <div id="login">
-    <input id="email" type="email" placeholder="Email">
-    <input id="password" type="password" placeholder="Password">
-    <button onclick="login()">Login</button>
-    <button onclick="signup()">Signup</button>
-  </div>
+<div class="main-content">
+  <h1>Welcome to My Website</h1>
+  <p>This is an informative page. Click the chat button to start messaging.</p>
+</div>
 
-  <div id="chatUI">
-    <div id="chat"></div>
-    <div id="controls">
-      <input id="message" type="text" placeholder="Type a message 😊">
-      <input id="image" type="file">
-      <button onclick="sendMessage()">Send</button>
-      <button onclick="logout()">Logout</button>
-    </div>
+<button class="chat-trigger" onclick="toggleChat()">💬</button>
+
+<div class="chat-app" id="chatApp">
+  <div class="chat-header">Chat <span><button onclick="logout()">⎋</button></span></div>
+  <div class="chat-body" id="chatBody"></div>
+  <div class="chat-footer">
+    <input type="text" id="messageInput" placeholder="Type a message 😊" />
+    <input type="file" id="imageInput" />
+    <button onclick="sendMessage()">➤</button>
   </div>
 </div>
 
 <script>
-  const client = new Appwrite.Client()
-    .setEndpoint('https://nyc.cloud.appwrite.io/v1')
-    .setProject('68c03290002a6945d45a');
-
-  const account = new Appwrite.Account(client);
-  const db = new Appwrite.Databases(client);
-  const storage = new Appwrite.Storage(client);
-
-  const DB_ID = '68c0330c001b8cfdf685';
-  const MESSAGES_ID = 'massages';
-  const USERS_ID = 'users';
-  const BUCKET_ID = '68c03347001ee63ac4ff';
+  const supabase = supabase.createClient(
+    'https://cuuxeukxhgplznxaadvs.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1dXhldWt4aGdwbHpueGFhZHZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc0MzM1NDUsImV4cCI6MjA3MzAwOTU0NX0.QiPsvo_pjNJ95-xxH8OC_XOFSRZ-hrGpXtHV30sy14Y'
+  );
 
   let currentUser = null;
-  let userMap = {};
 
-  async function checkSession() {
-    try {
-      currentUser = await account.get();
-      await loadUsers();
-      document.getElementById('login').style.display = 'none';
-      document.getElementById('chatUI').style.display = 'block';
-      loadMessages();
-    } catch {
-      document.getElementById('login').style.display = 'block';
-    }
-  }
-
-  async function signup() {
-    const email = email.value;
-    const password = password.value;
-    await account.create('unique()', email, password);
-    await db.createDocument(DB_ID, USERS_ID, 'unique()', {
-      name: email.split('@')[0],
-      email: email
-    });
-    login();
+  async function toggleChat() {
+    const chat = document.getElementById('chatApp');
+    chat.style.display = chat.style.display === 'flex' ? 'none' : 'flex';
+    if (!currentUser) await login();
   }
 
   async function login() {
-    await account.createEmailSession(email.value, password.value);
-    checkSession();
+    const email = prompt("Enter your email:");
+    const password = prompt("Enter your password:");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return alert("Login failed");
+    currentUser = data.user;
+    subscribeToMessages();
+    loadMessages();
   }
 
   async function logout() {
-    await account.deleteSession('current');
-    location.reload();
-  }
-
-  async function loadUsers() {
-    const res = await db.listDocuments(DB_ID, USERS_ID);
-    res.documents.forEach(u => userMap[u.$id] = u.name || u.email);
+    await supabase.auth.signOut();
+    currentUser = null;
+    document.getElementById('chatBody').innerHTML = '';
   }
 
   async function sendMessage() {
-    const text = message.value;
-    const fileInput = image;
+    const text = document.getElementById('messageInput').value;
+    const fileInput = document.getElementById('imageInput');
     let imageUrl = '';
 
     if (fileInput.files.length > 0) {
-      const file = await storage.createFile(BUCKET_ID, 'unique()', fileInput.files[0]);
-      imageUrl = storage.getFilePreview(BUCKET_ID, file.$id).href;
+      const file = fileInput.files[0];
+      const { data, error } = await supabase.storage
+        .from('image-storage')
+        .upload(`chat/${Date.now()}_${file.name}`, file);
+      if (!error) {
+        const { data: urlData } = supabase.storage
+          .from('image-storage')
+          .getPublicUrl(data.path);
+        imageUrl = urlData.publicUrl;
+      }
     }
 
-    await db.createDocument(DB_ID, MESSAGES_ID, 'unique()', {
+    await supabase.from('messages').insert([{
+      sender_id: currentUser.id,
       text,
-      senderId: currentUser.$id,
-      imageUrl,
-      timestamp: new Date().toISOString()
-    });
+      image_url: imageUrl,
+      status: 'sent'
+    }]);
 
-    message.value = '';
+    document.getElementById('messageInput').value = '';
     fileInput.value = '';
-    loadMessages();
   }
 
   async function loadMessages() {
-    const res = await db.listDocuments(DB_ID, MESSAGES_ID, [Appwrite.Query.orderAsc('$createdAt')]);
-    const chat = document.getElementById('chat');
-    chat.innerHTML = '';
+    const { data } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+    renderMessages(data);
+  }
 
-    res.documents.forEach(msg => {
+  function renderMessages(messages) {
+    const chatBody = document.getElementById('chatBody');
+    chatBody.innerHTML = '';
+    messages.forEach(msg => {
       const div = document.createElement('div');
-      div.className = 'message ' + (msg.senderId === currentUser.$id ? 'own' : 'other');
-
-      const senderName = userMap[msg.senderId] || 'Unknown';
-      div.innerHTML = `<div class="sender">${senderName}</div>${msg.text}`;
-
-      if (msg.imageUrl) {
-        div.innerHTML += `<br><img class="chat-img" src="${msg.imageUrl}">`;
+      div.className = 'message ' + (msg.sender_id === currentUser.id ? 'sent' : 'received');
+      div.innerHTML = msg.text || '';
+      if (msg.image_url) {
+        div.innerHTML += `<br><img class="chat-img" src="${msg.image_url}" />`;
       }
-
-      div.innerHTML += `<div class="timestamp">${new Date(msg.timestamp).toLocaleString()}</div>`;
-
-      if (msg.senderId === currentUser.$id) {
-        const delBtn = document.createElement('button');
-        delBtn.className = 'delete-btn';
-        delBtn.innerText = '🗑️';
-        delBtn.onclick = () => deleteMessage(msg.$id);
-        div.appendChild(delBtn);
+      div.innerHTML += `<div class="timestamp">${new Date(msg.created_at).toLocaleTimeString()}</div>`;
+      if (msg.sender_id === currentUser.id) {
+        div.innerHTML += `<div class="status">${getStatusIcon(msg.status)}</div>`;
       }
-
-      chat.appendChild(div);
+      chatBody.appendChild(div);
     });
-
-    chat.scrollTop = chat.scrollHeight;
+    chatBody.scrollTop = chatBody.scrollHeight;
   }
 
-  async function deleteMessage(id) {
-    await db.deleteDocument(DB_ID, MESSAGES_ID, id);
-    loadMessages();
+  function getStatusIcon(status) {
+    if (status === 'sent') return '✔️';
+    if (status === 'delivered') return '✔✔️';
+    if (status === 'seen') return '✔✔️🔵';
+    return '';
   }
 
-  checkSession();
+  function subscribeToMessages() {
+    supabase
+      .channel('chat')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, payload => {
+        loadMessages();
+      })
+      .subscribe();
+  }
 </script>
+
 </body>
 </html>
