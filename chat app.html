@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WhatsApp-Style Chat</title>
+  <script src="https://cdn.jsdelivr.net/npm/appwrite@13.0.0"></script>
+  <style>
+    body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 0; }
+    #container { max-width: 600px; margin: auto; padding: 20px; }
+    #login, #chatUI { display: none; }
+    #chat { background: #fff; border-radius: 10px; padding: 10px; height: 400px; overflow-y: scroll; box-shadow: 0 0 5px rgba(0,0,0,0.1); }
+    .message { margin: 10px 0; padding: 10px; border-radius: 10px; max-width: 80%; position: relative; }
+    .own { background: #dcf8c6; margin-left: auto; }
+    .other { background: #fff; border: 1px solid #ddd; }
+    .sender { font-weight: bold; font-size: 0.9em; margin-bottom: 5px; }
+    .timestamp { font-size: 0.8em; color: #888; margin-top: 5px; text-align: right; }
+    img.chat-img { max-width: 100%; border-radius: 8px; margin-top: 5px; }
+    #controls { display: flex; gap: 5px; margin-top: 10px; }
+    input[type="text"], input[type="email"], input[type="password"] { width: 100%; padding: 8px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
+    button { padding: 8px 12px; border: none; background: #25d366; color: white; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #128c7e; }
+    .delete-btn { position: absolute; top: 5px; right: 10px; background: transparent; border: none; color: red; cursor: pointer; }
+  </style>
+</head>
+<body>
+<div id="container">
+  <h2>WhatsApp-Style Chat</h2>
+
+  <div id="login">
+    <input id="email" type="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <button onclick="signup()">Signup</button>
+  </div>
+
+  <div id="chatUI">
+    <div id="chat"></div>
+    <div id="controls">
+      <input id="message" type="text" placeholder="Type a message 😊">
+      <input id="image" type="file">
+      <button onclick="sendMessage()">Send</button>
+      <button onclick="logout()">Logout</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const client = new Appwrite.Client()
+    .setEndpoint('https://nyc.cloud.appwrite.io/v1')
+    .setProject('68c03290002a6945d45a');
+
+  const account = new Appwrite.Account(client);
+  const db = new Appwrite.Databases(client);
+  const storage = new Appwrite.Storage(client);
+
+  const DB_ID = '68c0330c001b8cfdf685';
+  const MESSAGES_ID = 'massages';
+  const USERS_ID = 'users';
+  const BUCKET_ID = '68c03347001ee63ac4ff';
+
+  let currentUser = null;
+  let userMap = {};
+
+  async function checkSession() {
+    try {
+      currentUser = await account.get();
+      await loadUsers();
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('chatUI').style.display = 'block';
+      loadMessages();
+    } catch {
+      document.getElementById('login').style.display = 'block';
+    }
+  }
+
+  async function signup() {
+    const email = email.value;
+    const password = password.value;
+    await account.create('unique()', email, password);
+    await db.createDocument(DB_ID, USERS_ID, 'unique()', {
+      name: email.split('@')[0],
+      email: email
+    });
+    login();
+  }
+
+  async function login() {
+    await account.createEmailSession(email.value, password.value);
+    checkSession();
+  }
+
+  async function logout() {
+    await account.deleteSession('current');
+    location.reload();
+  }
+
+  async function loadUsers() {
+    const res = await db.listDocuments(DB_ID, USERS_ID);
+    res.documents.forEach(u => userMap[u.$id] = u.name || u.email);
+  }
+
+  async function sendMessage() {
+    const text = message.value;
+    const fileInput = image;
+    let imageUrl = '';
+
+    if (fileInput.files.length > 0) {
+      const file = await storage.createFile(BUCKET_ID, 'unique()', fileInput.files[0]);
+      imageUrl = storage.getFilePreview(BUCKET_ID, file.$id).href;
+    }
+
+    await db.createDocument(DB_ID, MESSAGES_ID, 'unique()', {
+      text,
+      senderId: currentUser.$id,
+      imageUrl,
+      timestamp: new Date().toISOString()
+    });
+
+    message.value = '';
+    fileInput.value = '';
+    loadMessages();
+  }
+
+  async function loadMessages() {
+    const res = await db.listDocuments(DB_ID, MESSAGES_ID, [Appwrite.Query.orderAsc('$createdAt')]);
+    const chat = document.getElementById('chat');
+    chat.innerHTML = '';
+
+    res.documents.forEach(msg => {
+      const div = document.createElement('div');
+      div.className = 'message ' + (msg.senderId === currentUser.$id ? 'own' : 'other');
+
+      const senderName = userMap[msg.senderId] || 'Unknown';
+      div.innerHTML = `<div class="sender">${senderName}</div>${msg.text}`;
+
+      if (msg.imageUrl) {
+        div.innerHTML += `<br><img class="chat-img" src="${msg.imageUrl}">`;
+      }
+
+      div.innerHTML += `<div class="timestamp">${new Date(msg.timestamp).toLocaleString()}</div>`;
+
+      if (msg.senderId === currentUser.$id) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'delete-btn';
+        delBtn.innerText = '🗑️';
+        delBtn.onclick = () => deleteMessage(msg.$id);
+        div.appendChild(delBtn);
+      }
+
+      chat.appendChild(div);
+    });
+
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  async function deleteMessage(id) {
+    await db.deleteDocument(DB_ID, MESSAGES_ID, id);
+    loadMessages();
+  }
+
+  checkSession();
+</script>
+</body>
+</html>
